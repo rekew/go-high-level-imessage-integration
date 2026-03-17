@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "GHL Message Catcher",
+  "version": "1.0",
+  "description": "Catch outbound messages from GoHighLevel",
+  "permissions": ["scripting"],
+  "host_permissions": [
+    "*://*.gohighlevel.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.gohighlevel.com/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
