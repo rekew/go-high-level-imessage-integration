@@ -12,6 +12,8 @@ from imessage import (
     process_messages
 )
 
+from database import engine
+
 # PYTHON AND THIRD PARTY MODULES
 import asyncio
 from contextlib import asynccontextmanager
@@ -51,6 +53,7 @@ async def lifespan(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+        await engine.dispose()
 
 
 # ---------- APP ----------
@@ -60,7 +63,7 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -89,3 +92,7 @@ async def webhook(data: ExtensionRequest):
     await send_message(sender, data.message)
 
     return {"status": "ok"}
+
+@app.get("/getRowByLocationId/{locationId}")
+async def get_row_by_location_id(locationId: str):
+    return {"locationId": locationId}

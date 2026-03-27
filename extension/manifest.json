@@ -3,14 +3,18 @@
   "name": "GHL Message Catcher",
   "version": "1.0",
   "description": "Catch outbound messages from GoHighLevel",
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": ["scripting"],
   "host_permissions": [
-    "*://*.gohighlevel.com/*"
+    "*://*.gohighlevel.com/*",
+    "https://nontautological-proauthor-ramiro.ngrok-free.dev/*"
   ],
   "content_scripts": [
     {
       "matches": ["*://*.gohighlevel.com/*"],
-      "js": ["content.js"]
+      "js": ["Api.js", "content.js"]
     }
   ]
 }
