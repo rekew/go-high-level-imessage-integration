@@ -9,6 +9,7 @@ from alembic import context
 
 from models.base import Base
 from models.pit_config import PitConfig
+from models.contact import Contact
 
 
 target_metadata = Base.metadata

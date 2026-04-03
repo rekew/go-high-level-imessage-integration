@@ -1,5 +1,5 @@
 import sqlite3
-from conf import CHAT_DB_PATH, TOKEN
+from conf import CHAT_DB_PATH
 from helpers import create_contact, create_conversation, get_conversation, send_inbound_message
 
 
@@ -74,7 +74,9 @@ async def process_messages(rows):
         if not contact_id:
             raise Exception(f"Failed to get contactId: {data}")
 
-        response = await create_conversation(contact_id)
+        location_id = response["locationId"]
+
+        response = await create_conversation(contact_id, location_id)
 
         data = response["data"]
 
@@ -85,4 +87,4 @@ async def process_messages(rows):
         elif response["status"] in (200, 201):
             conversation_id = data.get("conversation", {}).get("id")
 
-        response = await send_inbound_message(conversation_id, text)
+        response = await send_inbound_message(conversation_id, text, location_id)

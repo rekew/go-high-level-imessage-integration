@@ -1,78 +1,148 @@
 console.log("EXTENSION LOADED 🚀");
 
-function getRowByLocationId() {
+const BASE_URL = "https://nontautological-proauthor-ramiro.ngrok-free.dev";
 
-  const path = window.location.pathname;
+const HEADERS = {
+  "Content-Type": "application/json",
+  "ngrok-skip-browser-warning": "true",
+};
 
-  const match = path.match(/\/location\/([^/]+)/);
-
-  if (!match) {
-    console.log("❌ locationId not found");
-    return null;
-  }
-
-  const locationId = match[1];
-
-  console.log("✅ locationId:", locationId);
-
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      {
-        type: "API_CALL",
-        url: `https://nontautological-proauthor-ramiro.ngrok-free.dev/getRowByLocationId/${locationId}`
-      },
-      (response) => {
-        if (response.error) {
-          reject(response.error);
-        } else {
-          resolve(response.data);
-        }
-      }
-    );
-  });
+function getLocationId() {
+  const match = window.location.pathname.match(/\/location\/([^/]+)/);
+  return match ? match[1] : null;
 }
 
 function getConversationId() {
-  const url = window.location.href;
-
-  const parts = url.split("/conversations/conversations/");
-
+  const parts = window.location.href.split("/conversations/conversations/");
   if (parts.length < 2) return null;
-
   return parts[1].split("?")[0];
 }
 
-document.addEventListener("click", async (e) => {
+async function apiCall(url, options = {}) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { ...HEADERS, ...(options.headers || {}) },
+  });
 
-  getRowByLocationId();
+  return {
+    status: res.status,
+    data: res.status !== 204 ? await res.json() : null,
+  };
+}
 
-  const btn = e.target.closest("button");
-  if (!btn) return;
+async function checkOrPromptConfig(locationId) {
+  const { status, data } = await apiCall(
+    `${BASE_URL}/getRowByLocationId/${locationId}`,
+  );
 
-  if (!btn.innerText.includes("Send")) return;
+  if (status === 200) {
+    return data.pitToken;
+  }
+
+  if (status !== 404) {
+    alert("❌ Unexpected error checking location config.");
+    return null;
+  }
+
+  const pitToken = prompt(
+    `⚙️ This location is not configured yet.\n\nPlease enter your PIT Token for location:\n${locationId}`,
+  );
+
+  if (!pitToken || !pitToken.trim()) {
+    alert("❌ No PIT Token provided.");
+    return null;
+  }
+
+  const saveResult = await apiCall(`${BASE_URL}/savePitConfig`, {
+    method: "POST",
+    body: JSON.stringify({ locationId, pitToken: pitToken.trim() }),
+  });
+
+  if (saveResult.status !== 200) {
+    alert("❌ Failed to save configuration.");
+    return null;
+  }
+
+  alert("✅ Configuration saved! Click Send again.");
+  return null;
+}
+
+let cachedToken = null;
+
+// =======================
+// 🔥 ТВОЙ ОБРАБОТЧИК (ПОЧИНЕН)
+// =======================
+async function handleSend() {
+  console.log("✅ SEND DETECTED");
 
   const textarea = document.querySelector("textarea");
-
-  if (!textarea) return;
+  if (!textarea) {
+    console.error("❌ No textarea found");
+    return;
+  }
 
   const message = textarea.value;
-
   const conversationId = getConversationId();
+  const locationId = getLocationId();
 
-  console.log("Message:", message);
-  console.log("Conversation:", conversationId);
+  console.log("📋 message:", message);
+  console.log("📋 conversationId:", conversationId);
+  console.log("📋 locationId:", locationId);
 
-  await fetch(
-    "https://nontautological-proauthor-ramiro.ngrok-free.dev/webhook",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        conversationId: conversationId,
-        message: message,
-      }),
-    },
-  );
+  if (!conversationId || !locationId) {
+    console.error("❌ Missing IDs");
+    return;
+  }
+
+  if (!cachedToken) {
+    console.log("🔑 Checking config...");
+    cachedToken = await checkOrPromptConfig(locationId);
+  }
+
+  if (!cachedToken) {
+    console.log("⚠️ No token, aborting");
+    return;
+  }
+
+  console.log("📤 Sending webhook...");
+
+  const { status } = await apiCall(`${BASE_URL}/webhook`, {
+    method: "POST",
+    body: JSON.stringify({ conversationId, message, locationId }),
+  });
+
+  if (status === 200) {
+    console.log("✅ Message sent!");
+  } else {
+    console.error("❌ Webhook failed:", status);
+  }
+}
+
+// =======================
+// 🔥 FIX 1: CAPTURE PHASE CLICK
+// =======================
+document.addEventListener(
+  "click",
+  async (e) => {
+    const sendBtn = e.target.closest("#conv-send-button-simple");
+    if (!sendBtn) return;
+
+    handleSend();
+  },
+  true, // 🔥 ключевой фикс
+);
+
+// =======================
+// 🔥 FIX 2: ENTER KEY FALLBACK
+// =======================
+document.addEventListener("keydown", async (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    const textarea = document.querySelector("textarea");
+    if (!textarea) return;
+
+    if (document.activeElement === textarea) {
+      console.log("⌨️ ENTER SEND DETECTED");
+      handleSend();
+    }
+  }
 });

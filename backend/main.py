@@ -1,9 +1,12 @@
 # FASTAPI MODULES
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select
+from models.pit_config import PitConfig
+from database import AsyncSessionLocal
 
 # PROJECT MODULES
-from helpers import get_conversation, get_contact, send_message
+from helpers import create_contact_db, get_conversation, get_contact, send_message
 from imessage import (
     create_tracker,
     get_last_rowid,
@@ -74,17 +77,20 @@ app.add_middleware(
 class ExtensionRequest(BaseModel):
     message: str
     conversationId: str
-
+    locationId: str
 
 @app.post("/webhook")
 async def webhook(data: ExtensionRequest):
-    conversation = await get_conversation(data.conversationId)
 
-    contact = await get_contact(conversation["contactId"])
+    conversation = await get_conversation(data.conversationId, data.locationId)
+
+    contact = await get_contact(conversation["contactId"], data.locationId)
 
     contact_data = contact.get("contact", {})
 
     sender = contact_data.get("phone") or contact_data.get("email")
+
+    await create_contact_db(data.locationId, contact_data)
 
     if not sender:
         raise ValueError("No phone or email found in contact")
@@ -93,6 +99,36 @@ async def webhook(data: ExtensionRequest):
 
     return {"status": "ok"}
 
+
 @app.get("/getRowByLocationId/{locationId}")
 async def get_row_by_location_id(locationId: str):
-    return {"locationId": locationId}
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(PitConfig).where(PitConfig.location_id == locationId)
+        )
+        row = result.scalar_one_or_none()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Location not found")
+
+        return {
+            "locationId": row.location_id,
+            "pitToken": row.pit_token
+        }
+
+
+class PitConfigRequest(BaseModel):
+    locationId: str
+    pitToken: str
+
+
+@app.post("/savePitConfig")
+async def save_pit_config(data: PitConfigRequest):
+    async with AsyncSessionLocal() as session:
+        new_config = PitConfig(
+            location_id=data.locationId,
+            pit_token=data.pitToken
+        )
+        session.add(new_config)
+        await session.commit()
+        return {"status": "saved"}
